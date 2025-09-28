@@ -61,8 +61,8 @@ void tiny_ml_task(void *pvParameters){
 
         // Get and process output
         float result = output->data.f[0];
-        Serial.print("Inference result: ");
-        Serial.println(result);
+        //Serial.print("Inference result: ");
+        //Serial.println(result);
 
         vTaskDelay(5000); 
     }

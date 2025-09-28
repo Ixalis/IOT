@@ -25,11 +25,13 @@ void temp_humi_monitor(void *pvParameters){
         }
 
         // Print the results
+        /*
         Serial.print("Humidity: ");
         Serial.print(humidity);
         Serial.print("%  Temperature: ");
         Serial.print(temperature);
         Serial.println("°C");
+        */
         vTaskDelay(5000);
     }
     

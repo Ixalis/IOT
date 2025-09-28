@@ -8,7 +8,7 @@ bool isAPMode = true;
 
 WebServer server(80);
 
-String ssid = "ESP32-AP";
+String ssid = "ESP32-AP123456789";
 String password = "12345678";
 String wifi_ssid = "";
 String wifi_password = "";
@@ -135,6 +135,7 @@ void handleConnect() {
   isAPMode = false;
   connecting = true;
   connect_start_ms = millis();
+  connectToWiFi();
 }
 
 // ========== WiFi ==========
@@ -160,6 +161,9 @@ void connectToWiFi() {
   WiFi.mode(WIFI_STA);
   WiFi.begin(wifi_ssid.c_str(), wifi_password.c_str());
   Serial.print("Connecting to ");
+  Serial.print(wifi_ssid.c_str());
+  Serial.print(wifi_password.c_str());
+  
   Serial.println(wifi_ssid);
 }
 
