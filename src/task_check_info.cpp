@@ -62,13 +62,15 @@ bool check_info_File(bool check)
 {
   if (!check)
   {
+    Load_info_File();
     if (!LittleFS.begin(true))
     {
       Serial.println("❌ Lỗi khởi động LittleFS!");
       return false;
     }
+    
   }
-  Load_info_File();
+  
   if (WIFI_SSID.isEmpty() && WIFI_PASS.isEmpty())
   {
     if (!check)
