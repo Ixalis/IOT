@@ -38,7 +38,7 @@ void loop()
     }
     else
     {
-      CORE_IOT_reconnect();
+      //CORE_IOT_reconnect();
     }
   }
   Webserver_reconnect();

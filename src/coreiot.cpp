@@ -1,7 +1,7 @@
 #include "coreiot.h"
 
 // ----------- CONFIGURE THESE! -----------
-const char* coreIOT_Server = "app.coreiot.io";  
+const char* coreIOT_Server = "10.235.76.226";  
 const char* coreIOT_Token = "g7drm1amhd3dchr379xu";   // Device Access Token
 const int   mqttPort = 1883;
 // ----------------------------------------
@@ -15,7 +15,12 @@ void reconnect() {
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
     // Attempt to connect (username=token, password=empty)
-    if (client.connect("ESP32Client", coreIOT_Token, NULL)) {
+    //if (client.connect("ESP32Client", coreIOT_Token, NULL)) {
+    String clientId = "ESP32Client-";
+    clientId += String(random(0xffff), HEX);
+
+    if (client.connect(clientId.c_str())) {
+        
       Serial.println("connected to CoreIOT Server!");
       client.subscribe("v1/devices/me/rpc/request/+");
       Serial.println("Subscribed to v1/devices/me/rpc/request/+");
@@ -96,7 +101,7 @@ void setup_coreiot(){
 
   Serial.println(" Connected!");
 
-  client.setServer(coreIOT_Server, mqttPort);
+  client.setServer(CORE_IOT_SERVER.c_str(), CORE_IOT_PORT.toInt());
   client.setCallback(callback);
 
 }
@@ -117,6 +122,8 @@ void coreiot_task(void *pvParameters){
         
         client.publish("v1/devices/me/telemetry", payload.c_str());
 
+
+        
         Serial.println("Published payload: " + payload);
         vTaskDelay(10000);  // Publish every 10 seconds
     }
