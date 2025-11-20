@@ -1,5 +1,6 @@
 #include "global.h"
 
+#include "anomaly_detect.h"
 #include "led_blinky.h"
 #include "neo_blinky.h"
 #include "temp_humi_monitor.h"
