@@ -11,6 +11,7 @@ import pandas as pd
 import os
 import tensorflow as tf
 from tensorflow import keras
+from tensorflow.keras import layers, models
 from sklearn.model_selection import train_test_split
 
 # ---------------- CONFIG ----------------
@@ -20,7 +21,6 @@ BATCH = 128
 EPOCHS = 30
 LATENT = 8
 REP_WINDOWS_N = 1000      # number of representative windows to save for quantization
-MODEL_H5 = "ae_model.h5"
 AE_FLOAT_TFLITE = "ae_float.tflite"
 AE_UINT8_TFLITE = "ae_uint8.tflite"
 # ----------------------------------------
@@ -52,7 +52,6 @@ Xf = X.reshape((X.shape[0], WINDOW * 2))  # flattened windows
 X_train, X_val = train_test_split(Xf, test_size=0.2, shuffle=True, random_state=42)
 
 # 4) build tiny dense autoencoder
-from tensorflow.keras import layers, models
 inp_dim = WINDOW * 2
 inp = keras.Input(shape=(inp_dim,), name="input_flat")
 x = layers.Dense(64, activation="relu")(inp)
@@ -73,18 +72,7 @@ history = model.fit(X_train, X_train,
                     validation_data=(X_val, X_val),
                     verbose=2)
 
-# 6) save model (HDF5) and float TFLite using the in-memory model (no re-load)
-model.save(MODEL_H5)
-print(f"Saved {MODEL_H5}")
-
-# save float tflite (use model in memory to avoid load problems)
-converter = tf.lite.TFLiteConverter.from_keras_model(model)
-tflite_float = converter.convert()
-with open(AE_FLOAT_TFLITE, "wb") as f:
-    f.write(tflite_float)
-print(f"Wrote {AE_FLOAT_TFLITE} (float)")
-
-# 7) compute validation MSEs and save for threshold selection
+# 6) compute validation MSEs and save for threshold selection
 recon_val = model.predict(X_val, batch_size=256)
 mse_val = ((recon_val - X_val) ** 2).mean(axis=1)
 np.save("mse_val.npy", mse_val)
@@ -95,25 +83,36 @@ std_mse = mse_val.std()
 print(f"Validation MSE stats: mean={mean_mse:.6e}, std={std_mse:.6e}")
 print(f"Suggested threshold (mean + 3*std) = {mean_mse + 3*std_mse:.6e}")
 
-# 8) prepare representative windows for quantization: use subset of X_train (assumed normal)
+# 7) prepare representative windows for quantization
 rep_windows = X_train.copy()
 if rep_windows.shape[0] > REP_WINDOWS_N:
     rep_windows = rep_windows[:REP_WINDOWS_N]
-# Save as flattened windows for consumption by conversion script if needed
 np.save("rep_windows.npy", rep_windows)
 print(f"Saved rep_windows.npy with shape {rep_windows.shape}")
 
-# 9) convert to uint8 TFLite (full-integer quantization)
-# representative dataset generator that yields batches shaped [1, inp_dim] as float32
+# 8) convert using concrete function (workaround for macOS MLIR bug)
+@tf.function(input_signature=[tf.TensorSpec(shape=[1, inp_dim], dtype=tf.float32)])
+def serving_fn(x):
+    return model(x, training=False)
+
+concrete_func = serving_fn.get_concrete_function()
+
+# Float TFLite
+converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
+tflite_float = converter.convert()
+with open(AE_FLOAT_TFLITE, "wb") as f:
+    f.write(tflite_float)
+print(f"Wrote {AE_FLOAT_TFLITE} (float)")
+
+# 9) uint8 quantized TFLite
 def representative_data_gen():
     for i in range(min(len(rep_windows), REP_WINDOWS_N)):
         sample = rep_windows[i].astype(np.float32).reshape(1, inp_dim)
         yield [sample]
 
-converter = tf.lite.TFLiteConverter.from_keras_model(model)
+converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
 converter.optimizations = [tf.lite.Optimize.DEFAULT]
 converter.representative_dataset = representative_data_gen
-# force full integer quantization
 converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
 converter.inference_input_type = tf.uint8
 converter.inference_output_type = tf.uint8
@@ -125,9 +124,12 @@ try:
     print(f"Wrote {AE_UINT8_TFLITE} (uint8, full integer quantized)")
 except Exception as e:
     print("Quant conversion failed:", e)
-    print("You can try increasing REP_WINDOWS_N or ensure rep_windows.npy is valid normal data.")
-import numpy as np
-m = np.load("mse_val.npy")
-print("mean =", m.mean())
-print("std  =", m.std())
-print("recommended threshold =", m.mean() + 3*m.std())
+    print("Trying dynamic range quantization instead...")
+    
+    # Fallback: dynamic range quantization (easier to convert)
+    converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
+    converter.optimizations = [tf.lite.Optimize.DEFAULT]
+    tflite_dyn = converter.convert()
+    with open("ae_dynamic.tflite", "wb") as f:
+        f.write(tflite_dyn)
+    print("Wrote ae_dynamic.tflite (dynamic range quantized)")

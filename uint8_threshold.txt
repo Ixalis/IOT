@@ -1,0 +1,5 @@
+# uint8 model threshold stats
+mean=2.522186756134033
+std=12.079113960266113
+k=3.0
+threshold=38.75952863693237
